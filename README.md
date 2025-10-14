@@ -13,14 +13,10 @@ Supported targets:
 
 gekkoboot will attempt to load DOLs from the following locations in order:
 - USB Gecko in Card Slot B
-- USB Gecko in Card Slot A
-- IDE-EXI SLOT A
-- IDE-EXI SLOT B
-- M.2 Loader
-- SD2SP2
 - SD Gecko in Card Slot B
+- USB Gecko in Card Slot A
 - SD Gecko in Card Slot A
-- SD in SP1
+- SD2SP2
 
 You can use button shortcuts to keep alternate software on quick access.
 When loading from an SD card, gekkoboot will look for and load different filenames
@@ -187,7 +183,7 @@ Prerequisites:
 - [Git](https://git-scm.com/), for cloning the repo
 - [Meson](https://mesonbuild.com/), the build system
 - [Ninja](https://ninja-build.org/), the build executor
-- [7-Zip](https://www.7-zip.org/) (p7zip), to compress the executable
+- [7-Zip](https://www.7-zip.org/), to compress the executable
 - [Python 3](https://www.python.org/), required by build scripts
 - A C++ compiler for your build machine, for some build tools
 - For Qoob Pro: an IPL ROM dump, see below

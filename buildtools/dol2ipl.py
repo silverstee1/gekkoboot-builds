@@ -133,7 +133,7 @@ def main():
 
         print(f"Entry point:   0x{entry:0{8}X}")
         print(f"Load address:  0x{load:0{8}X}")
-        print(f"Image size:    {size} bytes ({size // 1024}K)")
+        print(f"Image size:    {size} bytes ({size / 1024:.1f}K)")
     elif executable.endswith(".elf"):
         pass
     else:

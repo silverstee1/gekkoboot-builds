@@ -286,8 +286,8 @@ end:
 
 extern u8 __xfb[];
 
-void delay_exit()
-{
+void
+delay_exit() {
 	// Wait while the d-pad down direction or reset button is held.
 	if (all_buttons_held & PAD_BUTTON_DOWN) {
 		kprintf("(release d-pad down to continue)\n");
@@ -305,12 +305,62 @@ void delay_exit()
 	}
 }
 
-int main() 
-{
+void
+__SYS_PreInit(void) {
+	u32 start = 0x8000'0000, end = 0x8000'3100;
+	DCZeroRange((void *) start, end - start);
+
+	// Detect MRAM configuration set by BS1
+	switch (((vu16 *) 0xCC00'4000)[20] & 7) {
+	case 0:
+		*(u32 *) 0x8000'0028 = 0x100'0000;
+		break;
+	case 1:
+	case 4:
+		*(u32 *) 0x8000'0028 = 0x200'0000;
+		break;
+	case 2:
+	case 6:
+		*(u32 *) 0x8000'0028 = 0x180'0000;
+		break;
+	case 3:
+	case 7:
+		*(u32 *) 0x8000'0028 = 0x300'0000;
+		break;
+	case 5:
+		*(u32 *) 0x8000'0028 = 0x400'0000;
+		break;
+	}
+
+	// Fill console type and device code
+	if (((vu32 *) 0xCC00'6000)[9] == 0xFF) {
+		*(u32 *) 0x8000'002C = SYS_CONSOLE_RETAIL_HW1;
+	} else {
+		*(u32 *) 0x8000'002C = SYS_CONSOLE_DEVELOPMENT_HW1;
+	}
+	*(u32 *) 0x8000'002C += ((vu32 *) 0xCC00'3000)[11] >> 28;
+
+	*(u32 *) 0x8000'00F8 = TB_BUS_CLOCK;
+	*(u32 *) 0x8000'00FC = TB_CORE_CLOCK;
+
+	*(u64 *) 0x8000'30D8 = -__builtin_ppc_get_timebase();
+}
+
+int
+main() {
 	// GCVideo takes a while to boot up.
 	// If VIDEO_GetPreferredMode is called before it's done,
 	// it will not see the "component cable", and default to interlaced mode,
 	// causing extraneous mode switches in the chainloaded application.
+	u64 start = gettime();
+	if (SYS_GetProgressiveScan()) {
+		while (!VIDEO_HaveComponentCable()) {
+			if (diff_sec(start, gettime()) >= 1) {
+				SYS_SetProgressiveScan(0);
+				break;
+			}
+		}
+	}
 
 	VIDEO_Init();
 	PAD_Init();
@@ -364,52 +414,55 @@ int main()
 
 	paths[num_paths++] = default_path;
 
-	if (load_usb('B')) goto load;
+	if (load_usb('B')) {
+		goto load;
+	}
 
-    if (load_usb('A')) goto load;
-
-    if (ide_exi_inserted(0)) {
-        kprintf("IDE-EXI v2+ detected in SLOT A\n");
-        if (load_fat("ataa", &__io_ataa, paths, num_paths)) goto load;
-    } else {
-        kprintf("No IDE-EXI v2 hardware detected in SLOT A\n");
-    }
+	if (load_fat("sdb", &__io_gcsdb, paths, num_paths)) {
+		goto load;
+	}
 	
-    if (ide_exi_inserted(1)) {
+	if (ide_exi_inserted(1)) {
         kprintf("IDE-EXI v2+ detected in SLOT B\n");
         if (load_fat("atab", &__io_atab, paths, num_paths)) goto load;
     } else {
         kprintf("No IDE-EXI v2 hardware detected in SLOT B\n");
     }
 
-    if (ide_exi_inserted(2)) {
+	if (load_usb('A')) {
+		goto load;
+	}
+
+	if (load_fat("sda", &__io_gcsda, paths, num_paths)) {
+		goto load;
+	}
+	
+	if (ide_exi_inserted(0)) {
+        kprintf("IDE-EXI v2+ detected in SLOT A\n");
+        if (load_fat("ataa", &__io_ataa, paths, num_paths)) goto load;
+    } else {
+        kprintf("No IDE-EXI v2 hardware detected in SLOT A\n");
+    }
+
+	if (load_fat("sd2", &__io_gcsd2, paths, num_paths)) {
+		goto load;
+	}
+	
+	if (ide_exi_inserted(2)) {
         kprintf("M.2 Loader detected in SP1\n");
         if (load_fat("atac", &__io_atac, paths, num_paths)) goto load;
     } else {
         kprintf("No M.2 Loader hardware detected in SP1\n");
     }
 
-    if (load_fat("sd2", &__io_gcsd2, paths, num_paths)) goto load;
-
-    if (load_fat("sdb", &__io_gcsdb, paths, num_paths)) goto load;
-
-    if (load_fat("sda", &__io_gcsda, paths, num_paths)) goto load;
-
 load:
-    if (!dol)
-    {
-        // If we reach here, all attempts to load a DOL failed
+	if (!dol) {
+		// If we reach here, all attempts to load a DOL failed
         // Since we've disabled the Qoob, we wil reboot to the Nintendo IPL
         kprintf("No DOL loaded. Rebooting into original IPL...\n");
         delay_exit();
         return 0;
-		
-		//Halting when No Dol Found
-		//kprintf("No DOL found! Halting.");
-		//while (true) {
-		//	VIDEO_WaitVSync();
-		//}
-    }
+	}
 
 	struct __argv dolargs;
 	dolargs.commandLine = (char *) NULL;

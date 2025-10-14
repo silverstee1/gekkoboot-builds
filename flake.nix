@@ -33,12 +33,13 @@
         devkitNoob.callPackage
         ({
           mkShell,
+          linkFarm,
           noobkitPPC,
           gamecube-tools,
           meson,
           ninja,
           clang-tools,
-          p7zip,
+          _7zz,
           python3,
         }:
           mkShell {
@@ -56,7 +57,9 @@
               clang-tools
 
               # Compressing binaries and the release archive
-              p7zip
+              (linkFarm "_7-zip" {
+                "bin/7z" = lib.getExe _7zz;
+              })
 
               # For build scripts
               python3

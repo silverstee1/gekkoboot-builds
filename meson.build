@@ -145,7 +145,7 @@ qoob_sx_updater_tgt = custom_target(
     input: [qoob_sx, qoob_sx_updater],
     output: 'qoob_sx_gekkoboot_upgrade.elf',
     command: [qoob_injector, '@INPUT@', '@OUTPUT@'],
-    build_by_default: true,
+    build_by_default: false, # FIXME doesn't fit... again
     install: true,
     install_dir: '/',
 )
