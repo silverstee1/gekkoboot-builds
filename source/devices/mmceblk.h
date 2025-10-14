@@ -15,12 +15,9 @@ extern "C" {
 
 extern DISC_INTERFACE __io_mmce0, __io_mmce1;
 
+// Block device interface for MMCE (Memory Card Emulator)
 #define DEVICE_TYPE_GAMECUBE_MCE(x) (('M'<<24)|('C'<<16)|('E'<<8)|('0'+(x)))
 
-
-
-
-// Block device interface for MMCE (Memory Card Emulator)
 
 #ifdef __cplusplus
 }

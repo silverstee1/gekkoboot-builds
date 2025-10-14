@@ -2,15 +2,10 @@
 #include "gctypes.h"
 #include "ogc/disc_io.h"
 #include "ogc/exi.h"
-#include "ogc/lwp.h"
 #include "ogc/semaphore.h"
 #include "ogc/system.h"
 #include "ogc/timesupp.h"
-#include "subprojects/libogc2/gc/ogc/exi.h"
-#include "subprojects/libogc2/gc/ogc/system.h"
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
+
 #include <sys/unistd.h>
 
 
@@ -144,10 +139,7 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
         
         EXI_Deselect(chan);
         EXI_Unlock(chan);
-        struct timespec timeout = {
-            .tv_sec = 5,  // 5 second timeout
-            .tv_nsec = 0
-        };
+        
         if (LWP_SemTimedWait(__mmce_irq_sem, &timeout) != 0) {
             if (--retries > 0U) {
                 i -= 1;
