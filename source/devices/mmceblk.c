@@ -5,8 +5,10 @@
 #include "ogc/semaphore.h"
 #include "ogc/system.h"
 #include "ogc/timesupp.h"
+#include "subprojects/libogc2/gc/ogc/system.h"
 
 #include <sys/unistd.h>
+#include <stdbool.h>
 
 
 #define MMCE_PAGE_SIZE512 512
@@ -25,7 +27,6 @@ static s32 __MMCE_EXI_Handler(s32 chan, s32 dev) {
 }
 
 static bool __mmce_startup(DISC_INTERFACE* disc) {
-    if (!__mmce_init) __mmce_init = true;
 
     LWP_SemInit(&__mmce_irq_sem, 0, 1);
 
@@ -36,10 +37,10 @@ static bool __mmce_isInserted(DISC_INTERFACE* disc)
 {
     s32 chan = (disc->ioType&0xff)-'0';
     u32 dev =  EXI_DEVICE_0;
-    if (EXI_Probe(chan))
+    if (EXI_ProbeEx(chan))
     {
         bool err = false;
-        u8 cmd[2];
+        u8 cmd[3];
         u32 id = 0x00;
 
         if (!EXI_LockEx(chan, dev)) return false;
@@ -67,7 +68,7 @@ static bool __mmce_isInserted(DISC_INTERFACE* disc)
 }
 
 static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSectors, void* buffer) {
-    u8 cmd[10] = {0x8B, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    u8 cmd[8] = {0x8B, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     
     s32 ret = 0,chan = (disc->ioType&0xff)-'0';
     u32 dev = EXI_DEVICE_0;
@@ -81,12 +82,11 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
     cmd[3] = (sector >> 16) & 0xFF;
     cmd[4] = (sector >> 8) & 0xFF;
     cmd[5] = sector & 0xFF;
-    cmd[6] = (numSectors >> 24) & 0xFF;
-    cmd[7] = (numSectors >> 16) & 0xFF;
-    cmd[8] = (numSectors >> 8) & 0xFF;
-    cmd[9] = numSectors & 0xFF;
+    cmd[6] = (numSectors >> 8) & 0xFF;
+    cmd[7] = numSectors & 0xFF;
+    EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
 
-    if (EXI_LockEx(chan, dev) < 0)
+    if (!EXI_LockEx(chan, dev))
     {
         return false;
     }
@@ -104,20 +104,24 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
     }
     EXI_Deselect(chan);
     EXI_Unlock(chan);
-    EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
+    //EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
 
     struct timespec timeout = {
         .tv_sec = 5,  // 5 second timeout
         .tv_nsec = 0
     };
-    if (LWP_SemTimedWait(__mmce_irq_sem, &timeout) != 0) {
-        return false;
-    }
     
     cmd[1] = 0x21; // Change to read command
     for (sec_t i = 0; i < numSectors; i++) {
         u8* ptr = (u8*)buffer + (i * MMCE_PAGE_SIZE512);
-        EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
+        if (LWP_SemTimedWait(__mmce_irq_sem, &timeout) != 0) {
+            if (--retries > 0U) {
+                i -= 1;
+                sleep(2); // Sleep 2 seconds before retry
+            }
+            else
+                break;
+        }
 
         if (!EXI_LockEx(chan, dev)) {
             EXI_RegisterEXICallback(chan, NULL);
@@ -129,8 +133,8 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
             EXI_RegisterEXICallback(chan, NULL);
             return false;
         }
-        if (!EXI_ImmEx(chan, cmd, 2, EXI_WRITE)
-            || !EXI_DmaEx(chan, ptr, MMCE_PAGE_SIZE512, EXI_READ)) {
+        if (!EXI_ImmEx(chan, cmd, 3, EXI_WRITE)
+            || !EXI_ImmEx(chan, ptr, MMCE_PAGE_SIZE512, EXI_READ)) {
             EXI_Deselect(chan);
             EXI_Unlock(chan);
             EXI_RegisterEXICallback(chan, NULL);
@@ -139,15 +143,6 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
         
         EXI_Deselect(chan);
         EXI_Unlock(chan);
-        
-        if (LWP_SemTimedWait(__mmce_irq_sem, &timeout) != 0) {
-            if (--retries > 0U) {
-                i -= 1;
-                sleep(2); // Sleep 2 seconds before retry
-            }
-            else
-                break;
-        }
     }
     EXI_RegisterEXICallback(chan, NULL);
 
@@ -155,7 +150,7 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
 }
 
 static bool __mmce_writeSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSectors, const void* buffer) {
-    u8 cmd[10] = {0x8B, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    u8 cmd[8] = {0x8B, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     
     s32 ret = 0,chan = (disc->ioType&0xff)-'0';
     u32 dev = (chan == 0) ? EXI_DEVICE_0 : EXI_DEVICE_1;
@@ -169,10 +164,8 @@ static bool __mmce_writeSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSec
     cmd[3] = (sector >> 16) & 0xFF;
     cmd[4] = (sector >> 8) & 0xFF;
     cmd[5] = sector & 0xFF;
-    cmd[6] = (numSectors >> 24) & 0xFF;
-    cmd[7] = (numSectors >> 16) & 0xFF;
-    cmd[8] = (numSectors >> 8) & 0xFF;
-    cmd[9] = numSectors & 0xFF;
+    cmd[6] = (numSectors >> 8) & 0xFF;
+    cmd[7] = numSectors & 0xFF;
 
     if (EXI_Lock(chan, dev, NULL) < 0)
     {
