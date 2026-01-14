@@ -12,13 +12,16 @@ Supported targets:
 ## Usage
 
 gekkoboot will attempt to load DOLs from the following locations in order:
-- USB Gecko in Card Slot B
-- SD Gecko in Card Slot B
-- IDE-EXI in Card Slot B
-- USB Gecko in Card Slot A
-- SD Gecko in Card Slot A
-- IDE-EXI in Card Slot A
+- USB Gecko in Slot B
+- SD Card in Slot B
+- IDE-EXI in Slot B
+- USB Gecko in Slot A
+- SD Card in Slot A
+- SD2SP1
+- IDE-EXI in Slot A
 - SD2SP2
+- MMCE Slot A
+- MMCE Slot B
 - M.2 Loader in SP1
 
 You can use button shortcuts to keep alternate software on quick access.
