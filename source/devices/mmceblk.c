@@ -5,6 +5,7 @@
 #include "ogc/semaphore.h"
 #include "ogc/system.h"
 #include "ogc/timesupp.h"
+#include "subprojects/libogc2/gc/ogc/exi.h"
 #include "subprojects/libogc2/gc/ogc/system.h"
 
 #include <sys/unistd.h>
@@ -37,32 +38,54 @@ static bool __mmce_isInserted(DISC_INTERFACE* disc)
 {
     s32 chan = (disc->ioType&0xff)-'0';
     u32 dev =  EXI_DEVICE_0;
+    bool ret = false;
+    
     if (EXI_ProbeEx(chan))
     {
         bool err = false;
         u8 cmd[3];
         u32 id = 0x00;
-
-        if (!EXI_LockEx(chan, dev)) return false;
-        if (!EXI_Select(chan, dev, EXI_SPEED16MHZ)) {
-            EXI_Unlock(chan);
-            return false;
-        }
-
-        cmd[0] = 0x8B;
-        cmd[1] = 0x00;
-
-        err |= !EXI_ImmEx(chan, cmd, sizeof(cmd), EXI_WRITE);
-        err |= !EXI_ImmEx(chan, &id, sizeof(id), EXI_READ);
-        err |= !EXI_Deselect(chan);
+        
+        EXI_LockEx(chan, dev);
+        
+        EXI_GetIDEx(chan, dev, &id);
+        
         EXI_Unlock(chan);
         
-        if (err)
-            return false;
-        else if (id >> 16 != 0x3842)
-            return false;
-        else
-            return true;
+        if ((id >> 16) == 0x3842) {
+            EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
+            struct timespec timeout = {
+                .tv_sec = 5,  // 5 second timeout
+                .tv_nsec = 0
+            };
+            if (!LWP_SemTimedWait(__mmce_irq_sem, &timeout)) {
+                ret = true;
+            }
+            
+            EXI_RegisterEXICallback(chan, NULL);
+            return ret;
+        } else {
+            if (!EXI_LockEx(chan, dev)) return false;
+            if (!EXI_Select(chan, dev, EXI_SPEED16MHZ)) {
+                EXI_Unlock(chan);
+                return false;
+            }
+    
+            cmd[0] = 0x8B;
+            cmd[1] = 0x00;
+    
+            err |= !EXI_ImmEx(chan, cmd, sizeof(cmd), EXI_WRITE);
+            err |= !EXI_ImmEx(chan, &id, sizeof(id), EXI_READ);
+            err |= !EXI_Deselect(chan);
+            EXI_Unlock(chan);
+            
+            if (err)
+                return false;
+            else if (id >> 16 != 0x3842)
+                return false;
+            else
+                return true;
+        }
     }
     return false;
 }
@@ -85,16 +108,17 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
     cmd[6] = (numSectors >> 8) & 0xFF;
     cmd[7] = numSectors & 0xFF;
     EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
+    EXI_Probe(chan);
 
     if (!EXI_LockEx(chan, dev))
     {
         return false;
     }
-    
-    if (!EXI_Select(chan, dev, EXI_SPEED16MHZ)) 
+    s32 err = EXI_Select(chan, dev, EXI_SPEED32MHZ);
+    // Retry select until success
+    while (err != 1) 
     {
-        EXI_Unlock(chan);
-        return false;
+        err = EXI_Select(chan, dev, EXI_SPEED32MHZ);
     }
 
     if (!EXI_ImmEx(chan, &cmd, sizeof(cmd), EXI_WRITE)) {
@@ -104,7 +128,6 @@ static bool __mmce_readSectors(DISC_INTERFACE* disc, sec_t sector, sec_t numSect
     }
     EXI_Deselect(chan);
     EXI_Unlock(chan);
-    //EXI_RegisterEXICallback(chan, __MMCE_EXI_Handler);
 
     struct timespec timeout = {
         .tv_sec = 5,  // 5 second timeout
