@@ -20,8 +20,8 @@ gekkoboot will attempt to load DOLs from the following locations in order:
 - SD2SP1
 - IDE-EXI in Slot A
 - SD2SP2
-- MMCE Slot A
-- MMCE Slot B
+- MMCE Slot A (FlipperMCE, GCMCE)
+- MMCE Slot B (FlipperMCE, GCMCE)
 - M.2 Loader in SP1
 
 You can use button shortcuts to keep alternate software on quick access.
